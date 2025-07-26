@@ -1,0 +1,107 @@
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: always
+    privileged: true
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - 2375
+
+  traefik:
+    depends_on:
+      - socket-proxy
+    image: "traefik:3.5"
+    restart: always
+    env_file:
+      - .env.traefik
+    command:
+      # Tell Traefik to discover containers using the Docker API
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      # https://doc.traefik.io/traefik/https/acme/
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      # Set up an insecure listener that redirects all traffic to TLS
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      # Set up the TLS configuration for our websecure listener
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http3
+      - --entrypoints.websecure.http.tls=true
+      - --entrypoints.websecure.http.tls.certResolver=letsencrypt
+      - --entrypoints.websecure.http.tls.domains[0].main=$DOMAIN
+      - --entrypoints.websecure.http.tls.domains[0].sans=*.$DOMAIN
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+
+  pocket-id:
+    image: ghcr.io/pocket-id/pocket-id:v1
+    restart: unless-stopped
+    expose:
+      - 1411
+    volumes:
+      - "pocket-id-db:/app/data"
+    environment:
+      APP_URL: https://auth.$DOMAIN
+      TRUST_PROXY: true
+      # MAXMIND_LICENSE_KEY:
+    healthcheck:
+      test: ["CMD", "/app/pocket-id", "healthcheck"]
+      interval: 1m30s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+    labels:
+      traefik.enable: true
+      traefik.http.routers.pocket-id.rule: Host(`auth.$DOMAIN`)
+      traefik.http.routers.pocket-id.entrypoints: websecure
+
+  oidc-cookie-forward-auth:
+    depends_on:
+      pocket-id:
+        condition: service_healthy
+    restart: unless-stopped
+    build:
+      context: ./
+      pull: true
+    env_file:
+      - .env.oidc-cookie-forward-auth
+    environment:
+      SQLITE_DB: /var/lib/oidc/db/sessions.db
+      OIDC_ISSUER_CONFIG_URL: "https://auth.$DOMAIN/.well-known/openid-configuration"
+      DOMAIN_BASE: .$DOMAIN
+    volumes:
+      - oidc-db:/var/lib/oidc/db
+      - ./config/:/var/lib/oidc/config
+    expose:
+      - 3000
+    labels:
+      traefik.enable: true
+      traefik.http.middlewares.oidc-cookie-forward-auth.forwardauth.address: http://oidc-cookie-forward-auth:3000/oauth2/traefik
+      traefik.http.middlewares.oidc-cookie-forward-auth.forwardauth.authResponseHeaders: cookie
+
+  whoami:
+    depends_on:
+      oidc-cookie-forward-auth:
+        condition: service_healthy
+    image: traefik/whoami:latest
+    restart: unless-stopped
+    labels:
+      traefik.enable: true
+      traefik.http.routers.whoami.rule: Host(`whoami.$DOMAIN`)
+      traefik.http.routers.whoami.entrypoints: websecure
+      traefik.http.routers.whoami.middlewares: oidc-cookie-forward-auth
+
+volumes:
+  pocket-id-db:
+  oidc-db:
