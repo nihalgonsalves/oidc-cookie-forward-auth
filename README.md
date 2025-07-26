@@ -103,6 +103,25 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
      oidc-db:
    ```
 
+1. Add the middleware to the protected service:
+
+   ```yaml
+   services:
+     # ...
+     whoami:
+       depends_on:
+         oidc-cookie-forward-auth:
+           condition: service_healthy
+       image: traefik/whoami:latest
+       restart: unless-stopped
+       labels:
+         traefik.enable: true
+         traefik.http.routers.whoami.rule: Host(`whoami.$DOMAIN`)
+         traefik.http.routers.whoami.entrypoints: websecure
+         # <add this middleware>
+         traefik.http.routers.whoami.middlewares: oidc-cookie-forward-auth
+   ```
+
 1. Create a config file:
 
    ```ts
