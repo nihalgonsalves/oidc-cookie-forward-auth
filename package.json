@@ -1,0 +1,23 @@
+{
+	"name": "oidc-cookie-forward-auth",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"test": "bun test",
+		"lint": "tsc --project tsconfig.json && biome check"
+	},
+	"dependencies": {
+		"@oslojs/crypto": "^1.0.1",
+		"@oslojs/encoding": "^1.1.0",
+		"@tsconfig/bun": "^1.0.8",
+		"@tsconfig/strictest": "^2.0.5",
+		"arctic": "^3.7.0",
+		"zod": "^4.0.10"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.1.2",
+		"@types/bun": "latest",
+		"typescript": "^5"
+	}
+}
