@@ -9,8 +9,8 @@ unauthenticated apps or apps that support auth via a plain header, but do not
 provide support for stateful authentication.
 
 This forward-auth middleware keeps track of cookies as part of the forward-auth
-session, and provides them to the Traefik forward-auth handler, to be used in
-the origin request.
+session, and provides them to the reverse-proxy forward-auth handler, to be used
+in the origin request.
 
 The forward-auth endpoint / server is never exposed. Everything is handled via
 the forward-auth middleware.
@@ -20,7 +20,7 @@ the forward-auth middleware.
 ### Prerequisites
 
 - A reverse proxy with forward-auth support (only [Traefik][traefik] is
-  currently supported)
+  currently supported and tested). See [Limitations](#limitations).
 - An OIDC provider, such as [Pocket ID][pocket-id]. Any provider conforming to
   the OIDC specification should work.
 
@@ -147,3 +147,12 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
    Every subsequent request will be re-validated using `validateUpstreamSession`,
    and then the valid cookies will be sent to the reverse proxy to be provided
    to the origin request.
+
+## Limitations
+
+- This has only been tested with Traefik, but Caddy and nginx also support
+  forward-auth and should work.
+- While an upstream session is unique to a browser session, this doesn't support
+  any sub-configuration based on the user (or for e.g. groups). Access is
+  allowed as long as the OIDC provider authorises the user to access this
+  client.
