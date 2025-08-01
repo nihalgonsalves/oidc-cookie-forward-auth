@@ -13,7 +13,7 @@
 		"@tsconfig/bun": "^1.0.8",
 		"@tsconfig/strictest": "^2.0.5",
 		"arctic": "^3.7.0",
-		"zod": "^4.0.10"
+		"zod": "^4.0.14"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.1.2",
