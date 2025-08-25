@@ -106,6 +106,7 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
 1. Create a config file:
 
    ```ts
+   // ./config/whoami.ts
    export const config = {
      // this is any function that returns a fetch Response containing
      // the Set-Cookie headers
