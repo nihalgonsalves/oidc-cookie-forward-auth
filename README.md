@@ -64,7 +64,7 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
    list all the hosts, or create a client per host (as well as a forward-auth
    container and middleware per host).
 
-1. Add the forward-auth container:
+1. Add the forward-auth container and the middleware to the service you want to protect:
 
    ```yaml
    services:
@@ -98,6 +98,18 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
          traefik.http.middlewares.oidc-cookie-forward-auth.forwardauth.authResponseHeaders: cookie
 
    # ...
+
+   whoami:
+     depends_on:
+       oidc-cookie-forward-auth:
+         condition: service_healthy
+     image: traefik/whoami:latest
+     restart: unless-stopped
+     labels:
+       traefik.enable: true
+       traefik.http.routers.whoami.rule: Host(`whoami.example.com`)
+       traefik.http.routers.whoami.entrypoints: websecure
+       traefik.http.routers.whoami.middlewares: oidc-cookie-forward-auth
 
    volumes:
      oidc-db:
