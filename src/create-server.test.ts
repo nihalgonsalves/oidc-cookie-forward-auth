@@ -1,11 +1,13 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
+
 import { createServer, type ServerOptions } from "./create-server";
 import { encodeSessionToken, SessionDatabase } from "./db";
 
 const randomInteger = (min: number, max: number) =>
 	Math.floor(Math.random() * (max - min + 1)) + min;
 
+// oxlint-disable-next-line func-style
 function expectToBeNotNullish<T>(
 	value: T | undefined | null,
 ): asserts value is T {
@@ -30,10 +32,14 @@ const createForwardAuthRequestHeaders = (url: URL) => ({
 const getCookiesFromResponse = (response: Response) =>
 	response.headers
 		.getAll("Set-Cookie")
-		?.map((cookie) => Bun.Cookie.parse(cookie)) ?? [];
+		.map((cookie) => Bun.Cookie.parse(cookie));
 
 const getClientCookieHeader = (cookies: Bun.Cookie[]) =>
 	cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+
+type SimpleRequestInit = {
+	headers?: Record<string, string>;
+};
 
 const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 	const db = new Database(":memory:", { strict: true });
@@ -95,7 +101,7 @@ const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 
 	const forwardAuthUrl = new URL("/oauth2/traefik", server.url);
 
-	const fetchForwardAuth = async (url = server.url, init?: RequestInit) =>
+	const fetchForwardAuth = async (url = server.url, init?: SimpleRequestInit) =>
 		fetch(forwardAuthUrl, {
 			...init,
 			redirect: "manual",
@@ -114,7 +120,7 @@ const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 	};
 };
 
-describe(createServer, async () => {
+describe(createServer, () => {
 	const testServers = createTestServers({});
 
 	it("returns 200 on /healthz", async () => {
@@ -160,7 +166,7 @@ describe(createServer, async () => {
 
 	const completeOauth2Flow = async (
 		testServerImpl: ReturnType<typeof createTestServers>,
-		authorizeInit: RequestInit,
+		authorizeInit: SimpleRequestInit,
 	) => {
 		const initialResponse = await testServerImpl.fetchForwardAuth();
 		const authResponse = await fetch(getRedirectLocation(initialResponse), {
@@ -285,7 +291,7 @@ describe(createServer, async () => {
 		);
 		expect(okForwardAuthResponse.status).toBe(200);
 
-		testServers.db.exec("DELETE FROM session WHERE id = ?", [
+		testServers.db.run("DELETE FROM session WHERE id = ?", [
 			encodeSessionToken(sessionCookie.value),
 		]);
 

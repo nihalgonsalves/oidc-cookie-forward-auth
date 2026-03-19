@@ -1,5 +1,5 @@
 export const config = {
-	getUpstreamCookies: () =>
+	getUpstreamCookies: async () =>
 		fetch(new URL("http://whoami:80/auth/signin"), {
 			method: "POST",
 			body: new URLSearchParams({

@@ -5,7 +5,8 @@
 1. Set up required ACME settings under the `certificatesresolvers.letsencrypt`
    CLI options in the `traefik` container
 
-1. Add the environment variables required for the ACME provider in `.env.traefik`
+1. Add the environment variables required for the ACME provider in
+   `.env.traefik`
 
 1. Start Pocket ID
 

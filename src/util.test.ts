@@ -1,4 +1,5 @@
 import { expect, it } from "bun:test";
+
 import { generateSessionToken } from "./util";
 
 it("generates a session token", () => {

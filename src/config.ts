@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const zUrl = z.url({ protocol: /^https?$/ });
+const zUrl = z.url({ protocol: /^https?$/ });
 
 const ZEnvSchema = z.object({
 	CLIENT_ID: z.string().min(1),
@@ -32,7 +32,7 @@ const ZOIDCDiscoverySchema = z.object({
 	scopes_supported: z.array(z.string()),
 });
 
-export const oidcConfigJson = ZOIDCDiscoverySchema.parse(
+const oidcConfigJson = ZOIDCDiscoverySchema.parse(
 	await oidcConfigResponse.json(),
 );
 
