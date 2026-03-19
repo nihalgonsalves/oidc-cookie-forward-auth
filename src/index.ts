@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+
 import {
 	COOKIE_SECURE,
 	DOMAIN_BASE,
@@ -22,21 +23,20 @@ const server = createServer({
 		}
 
 		const filename = DOMAIN_BASE
-			? name.replace(
-					// @ts-expect-error ts types for a new method
-					new RegExp(`${RegExp.escape(DOMAIN_BASE)}$`),
-					"",
-				)
+			? name.replace(new RegExp(`${RegExp.escape(DOMAIN_BASE)}$`), "")
 			: name;
 
 		try {
+			// oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-return, typescript/no-unsafe-argument
 			const { config } = await import(`/var/lib/oidc/config/${filename}.ts`);
 
 			hostCache.set(name, config);
 			return config;
+			// oxlint-enable typescript/no-unsafe-assignment, typescript/no-unsafe-return, typescript/no-unsafe-argument
 		} catch (error) {
 			throw new Error(
 				`Could not load host config for ${name}: ${error instanceof Error ? error.message : "Unknown error"}. Make sure the file exists in /var/lib/oidc/config/${filename}.ts`,
+				{ cause: error },
 			);
 		}
 	},
@@ -45,13 +45,15 @@ const server = createServer({
 	),
 });
 
-console.log(`Forward-auth server listening on ${server.url}`);
+console.log(`Forward-auth server listening on ${server.url.toString()}`);
 
+// oxlint-disable-next-line typescript/no-misused-promises
 process.on("SIGTERM", async () => {
 	await server.stop(false);
 	process.exit();
 });
 
+// oxlint-disable-next-line typescript/no-misused-promises
 process.on("SIGINT", async () => {
 	await server.stop(true);
 	process.exit();

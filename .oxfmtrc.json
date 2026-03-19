@@ -1,0 +1,23 @@
+{
+	"ignorePatterns": ["src/pages.gen.ts"],
+	"proseWrap": "always",
+	"sortPackageJson": true,
+	"printWidth": 80,
+	"sortImports": {
+		"groups": [
+			["side_effect"],
+			["builtin"],
+			["external", "type-external"],
+			["internal", "type-internal"],
+			["parent", "type-parent"],
+			["sibling", "type-sibling"],
+			["index", "type-index"]
+		]
+	},
+	"tailwindcss": {
+		"stylesheet": "./src/globals.css",
+		"attributes": ["class", "className"],
+		"functions": ["clsx", "cn"],
+		"preserveWhitespace": true
+	}
+}

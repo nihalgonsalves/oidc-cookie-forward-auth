@@ -1,5 +1,6 @@
 import * as arctic from "arctic";
 import type { CookieInit, HeadersInit } from "bun";
+
 import type { SessionDatabase } from "./db";
 import { generateSessionToken } from "./util";
 
@@ -24,7 +25,7 @@ export type ServerOptions = {
 	callbackPath?: string;
 	logoutPath?: string;
 	db: SessionDatabase;
-	serveOptions?: Omit<Bun.ServeOptions, "fetch" | "routes">;
+	serveOptions?: Omit<Bun.Serve.Options<undefined>, "fetch" | "routes">;
 };
 
 const defaultCookieOptions = {
@@ -33,6 +34,9 @@ const defaultCookieOptions = {
 	path: "/",
 	sameSite: "strict",
 } satisfies CookieInit;
+
+const getCookieHeader = (cookies: Bun.Cookie[]) =>
+	cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 
 export const createServer = ({
 	getHostConfig,
@@ -78,9 +82,6 @@ export const createServer = ({
 
 		return Response.redirect(url.toString(), 302);
 	};
-
-	const getCookieHeader = (cookies: Bun.Cookie[]) =>
-		cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 
 	const handleCallback = async (req: Bun.BunRequest, forwardedUrl: URL) => {
 		const { searchParams } = forwardedUrl;
@@ -147,22 +148,21 @@ export const createServer = ({
 		} catch (e) {
 			if (e instanceof arctic.OAuth2RequestError) {
 				// Invalid authorization code, credentials, or redirect URI
-				const code = e.code;
-				return new Response(`Error: ${code}`, { status: 401 });
+				return new Response(`Error: ${e.code}`, { status: 401 });
 			}
 			if (e instanceof arctic.ArcticFetchError) {
 				// Failed to call `fetch()`
 				const cause = e.cause;
 				return new Response(
 					`Error: ${cause instanceof Error ? cause.message : "Unknown"}`,
-					{ status: 502 },
+					{
+						status: 502,
+					},
 				);
 			}
 			// Parse error
 			return new Response(
-				`An unexpected error occurred: ${
-					e instanceof Error ? e.message : "Unknown"
-				}`,
+				`An unexpected error occurred: ${e instanceof Error ? e.message : "Unknown"}`,
 				{ status: 500 },
 			);
 		}
@@ -183,6 +183,8 @@ export const createServer = ({
 			return redirectToAuth(req, forwardedUrl);
 		}
 
+		// TODO:
+		// oxlint-disable-next-line typescript/no-unsafe-type-assertion
 		const cookies = (JSON.parse(session.upstreamCookies) as string[]).map(
 			(cookie) => new Bun.Cookie(cookie),
 		);
@@ -204,6 +206,8 @@ export const createServer = ({
 		});
 	};
 
+	// TODO:
+	// @ts-expect-error exactOptionalPropertyTypes issue with the default merging
 	return Bun.serve({
 		...serveOptions,
 		routes: {

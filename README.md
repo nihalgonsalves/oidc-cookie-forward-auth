@@ -50,10 +50,11 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
 
 ### Step-by-step
 
-> [!TIP]
-> There's a complete example in the [./docs/example/ directory](./docs/example/)
+> [!TIP] There's a complete example in the
+> [./docs/example/ directory](./docs/example/)
 
-1. Make sure you have [Traefik set up with SSL](https://doc.traefik.io/traefik/https/overview/)
+1. Make sure you have
+   [Traefik set up with SSL](https://doc.traefik.io/traefik/https/overview/)
    correctly
 
 1. Create a new OIDC client in your provider. The redirect URL is
@@ -64,7 +65,8 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
    list all the hosts, or create a client per host (as well as a forward-auth
    container and middleware per host).
 
-1. Add the forward-auth container and the middleware to the service you want to protect:
+1. Add the forward-auth container and the middleware to the service you want to
+   protect:
 
    ```yaml
    services:
@@ -120,46 +122,46 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
    ```ts
    // ./config/whoami.ts
    export const config = {
-     // this is any function that returns a fetch Response containing
-     // the Set-Cookie headers
-     getUpstreamCookies: () =>
-       fetch(new URL("http://whoami:80/auth/signin"), {
-         method: "POST",
-         body: new URLSearchParams({
-           // you can also add env variables to the cookie auth file
-           // and reference them using process.env.NAME
-           username: "admin",
-           password: "password",
-         }),
-       }),
-     // this is a validation request to make sure the session is still valid.
-     // use any URL that is only accessible when logged in.
-     // this enables the user to use logout functionality inside the origin
-     // app and seamlessly invalidate the OIDC session too.
-     validateUpstreamSession: async (headers: Bun.HeadersInit) => {
-       try {
-         const response = await fetch(new URL("http://whoami:80/me"), {
-           headers,
-           redirect: "manual",
-         });
+   	// this is any function that returns a fetch Response containing
+   	// the Set-Cookie headers
+   	getUpstreamCookies: () =>
+   		fetch(new URL("http://whoami:80/auth/signin"), {
+   			method: "POST",
+   			body: new URLSearchParams({
+   				// you can also add env variables to the cookie auth file
+   				// and reference them using process.env.NAME
+   				username: "admin",
+   				password: "password",
+   			}),
+   		}),
+   	// this is a validation request to make sure the session is still valid.
+   	// use any URL that is only accessible when logged in.
+   	// this enables the user to use logout functionality inside the origin
+   	// app and seamlessly invalidate the OIDC session too.
+   	validateUpstreamSession: async (headers: Bun.HeadersInit) => {
+   		try {
+   			const response = await fetch(new URL("http://whoami:80/me"), {
+   				headers,
+   				redirect: "manual",
+   			});
 
-         return response.ok;
-       } catch {
-         return false;
-       }
-     },
+   			return response.ok;
+   		} catch {
+   			return false;
+   		}
+   	},
    };
    ```
 
 1. That's it. Start the container, and visit your service, for example
    <https://whoami.example.com/>. You should be redirected to the OIDC provider.
 
-   Once logged in there, `getUpstreamCookies` will be called to log in to
-   the origin service, creating a session in the forward-auth service.
+   Once logged in there, `getUpstreamCookies` will be called to log in to the
+   origin service, creating a session in the forward-auth service.
 
-   Every subsequent request will be re-validated using `validateUpstreamSession`,
-   and then the valid cookies will be sent to the reverse proxy to be provided
-   to the origin request.
+   Every subsequent request will be re-validated using
+   `validateUpstreamSession`, and then the valid cookies will be sent to the
+   reverse proxy to be provided to the origin request.
 
 ## Limitations
 
