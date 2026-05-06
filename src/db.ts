@@ -36,7 +36,7 @@ export class SessionDatabase {
 		const session: Session = {
 			id: sessionId,
 			expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-			upstreamCookies: upstreamCookies,
+			upstreamCookies,
 		};
 
 		this.#db
