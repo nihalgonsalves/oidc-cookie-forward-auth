@@ -41,7 +41,9 @@ const CookieInitSchema = z.object({
 	value: z.string(),
 	domain: z.string().exactOptional(),
 	path: z.string().exactOptional(),
-	expires: z.union([z.number(), z.string()]).exactOptional(),
+	expires: z
+		.union([z.date().transform((d) => d.toISOString()), z.number(), z.string()])
+		.exactOptional(),
 	secure: z.boolean().exactOptional(),
 	sameSite: z.enum(["strict", "lax", "none"]).exactOptional(),
 	httpOnly: z.boolean().exactOptional(),
