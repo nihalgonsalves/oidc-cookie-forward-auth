@@ -1,5 +1,6 @@
 import * as arctic from "arctic";
 import type { CookieInit, HeadersInit } from "bun";
+import { z } from "zod";
 
 import type { SessionDatabase } from "./db";
 import { generateSessionToken } from "./util";
@@ -34,6 +35,19 @@ const defaultCookieOptions = {
 	path: "/",
 	sameSite: "strict",
 } satisfies CookieInit;
+
+const CookieInitSchema = z.object({
+	name: z.string(),
+	value: z.string(),
+	domain: z.string().exactOptional(),
+	path: z.string().exactOptional(),
+	expires: z.union([z.number(), z.string()]).exactOptional(),
+	secure: z.boolean().exactOptional(),
+	sameSite: z.enum(["strict", "lax", "none"]).exactOptional(),
+	httpOnly: z.boolean().exactOptional(),
+	partitioned: z.boolean().exactOptional(),
+	maxAge: z.number().exactOptional(),
+});
 
 const getCookieHeader = (cookies: Bun.Cookie[]) =>
 	cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
@@ -136,7 +150,9 @@ export const createServer = ({
 
 			db.createSession(
 				token,
-				JSON.stringify(cookies.map((cookie) => cookie.toJSON())),
+				JSON.stringify(
+					cookies.map((cookie) => CookieInitSchema.parse(cookie.toJSON())),
+				),
 			);
 
 			req.cookies.set(SESSION_COOKIE_NAME, token, {
@@ -183,11 +199,22 @@ export const createServer = ({
 			return redirectToAuth(req, forwardedUrl);
 		}
 
-		// TODO:
-		// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-		const cookies = (JSON.parse(session.upstreamCookies) as string[]).map(
-			(cookie) => new Bun.Cookie(cookie),
-		);
+		const cookies = z
+			.array(CookieInitSchema)
+			.parse(JSON.parse(session.upstreamCookies))
+			.map(
+				(cookie) =>
+					new Bun.Cookie({
+						...cookie,
+						// Bun should allow a `string` as CookieInit.expires, but throws
+						// "invalid cookie expiration date" (regression?)
+						...(typeof cookie.expires === "string"
+							? { expires: new Date(cookie.expires) }
+							: typeof cookie.expires === "number"
+								? { expires: new Date(cookie.expires * 1000) }
+								: {}),
+					}),
+			);
 
 		const headers = {
 			Cookie: getCookieHeader(cookies),
