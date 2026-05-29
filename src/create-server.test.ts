@@ -83,6 +83,7 @@ const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 						"Set-Cookie": new Bun.Cookie({
 							name: "test-cookie",
 							value: "test-value",
+							expires: new Date(),
 						}).serialize(),
 					},
 				}),
