@@ -1,8 +1,4 @@
-import { encodeBase32LowerCaseNoPadding } from "@oslojs/encoding";
+import { randomBytes } from "node:crypto";
 
-export const generateSessionToken = (): string => {
-	const bytes = new Uint8Array(20);
-	crypto.getRandomValues(bytes);
-	const token = encodeBase32LowerCaseNoPadding(bytes);
-	return token;
-};
+export const generateSessionToken = (): string =>
+	randomBytes(20).toString("base64url");

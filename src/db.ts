@@ -1,7 +1,6 @@
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import { sha256 } from "@oslojs/crypto/sha2";
-import { encodeHexLowerCase } from "@oslojs/encoding";
 import { z } from "zod";
 
 const SessionRowSchema = z.object({
@@ -25,7 +24,7 @@ type Session = {
 };
 
 export const encodeSessionToken = (token: string): string =>
-	encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+	createHash("sha256").update(token).digest("hex");
 
 export class SessionDatabase {
 	#db: DatabaseSync;
@@ -36,9 +35,7 @@ export class SessionDatabase {
 	}
 
 	createSession = (token: string, upstreamCookies: string): Session => {
-		const sessionId = encodeHexLowerCase(
-			sha256(new TextEncoder().encode(token)),
-		);
+		const sessionId = encodeSessionToken(token);
 
 		const session: Session = {
 			id: sessionId,
@@ -60,9 +57,7 @@ export class SessionDatabase {
 	};
 
 	validateSessionToken = (token: string): Session | null => {
-		const sessionId = encodeHexLowerCase(
-			sha256(new TextEncoder().encode(token)),
-		);
+		const sessionId = encodeSessionToken(token);
 
 		const row = SessionRowSchema.nullable().parse(
 			this.#db
