@@ -19,7 +19,7 @@
 	},
 	"devDependencies": {
 		"@nihalgonsalves/esconfig": "^0.17.4",
-		"@types/node": "^24.13.0",
+		"@types/node": "^25.9.1",
 		"cookie": "^1.1.1",
 		"lefthook": "^2.1.9",
 		"oxfmt": "^0.53.0",
