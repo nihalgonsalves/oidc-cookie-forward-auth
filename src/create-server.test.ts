@@ -1,11 +1,13 @@
-import { Database } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { DatabaseSync } from "node:sqlite";
 
-import { createServer, type ServerOptions } from "./create-server";
-import { encodeSessionToken, SessionDatabase } from "./db";
+import { serve, type ServerType } from "@hono/node-server";
+import { serialize } from "cookie";
+import { Hono } from "hono";
+import * as setCookieParser from "set-cookie-parser";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const randomInteger = (min: number, max: number) =>
-	Math.floor(Math.random() * (max - min + 1)) + min;
+import { createServer, type ServerOptions } from "./create-server.ts";
+import { encodeSessionToken, SessionDatabase } from "./db.ts";
 
 // oxlint-disable-next-line func-style
 function expectToBeNotNullish<T>(
@@ -14,6 +16,39 @@ function expectToBeNotNullish<T>(
 	expect(value).not.toBeNull();
 	expect(value).not.toBeUndefined();
 }
+
+const cleanups: (() => Promise<void>)[] = [];
+afterAll(async () => {
+	for (const stop of cleanups) {
+		await stop();
+	}
+});
+
+const startApp = async (app: Hono) => {
+	let server: ServerType;
+	const url = await new Promise<URL>((resolve) => {
+		server = serve({ fetch: app.fetch, port: 0 }, (info) => {
+			resolve(new URL(`http://localhost:${info.port}`));
+		});
+	});
+
+	const stop = async (): Promise<void> => {
+		if ("closeAllConnections" in server) {
+			server.closeAllConnections();
+		}
+		await new Promise<void>((resolve, reject) => {
+			server.close((err) => {
+				if (err) {
+					reject(err);
+				} else {
+					resolve();
+				}
+			});
+		});
+	};
+
+	return { url, stop };
+};
 
 const getRedirectLocation = (response: Response) => {
 	expect(response.status).toBe(302);
@@ -30,61 +65,54 @@ const createForwardAuthRequestHeaders = (url: URL) => ({
 });
 
 const getCookiesFromResponse = (response: Response) =>
-	response.headers
-		.getAll("Set-Cookie")
-		.map((cookie) => Bun.Cookie.parse(cookie));
+	setCookieParser.parseSetCookie(response.headers.getSetCookie());
 
-const getClientCookieHeader = (cookies: Bun.Cookie[]) =>
+const getClientCookieHeader = (cookies: setCookieParser.Cookie[]) =>
 	cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 
 type SimpleRequestInit = {
 	headers?: Record<string, string>;
 };
 
-const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
-	const db = new Database(":memory:", { strict: true });
+const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
+	const db = new DatabaseSync(":memory:");
 
-	const oauth2Server = Bun.serve({
-		port: randomInteger(4000, 10000),
-		routes: {
-			"/authorize": (req) => {
-				const reqUrl = new URL(req.url);
+	const oauth2App = new Hono();
+	oauth2App.get("/authorize", (c) => {
+		const redirectUri = c.req.query("redirect_uri");
+		const state = c.req.query("state");
 
-				const redirectUri = reqUrl.searchParams.get("redirect_uri");
-				const state = reqUrl.searchParams.get("state");
+		if (!redirectUri || !state) {
+			return c.text("Missing redirect_uri or state", 400);
+		}
 
-				if (!redirectUri || !state) {
-					return new Response("Missing redirect_uri or state", { status: 400 });
-				}
+		const redirect = new URL(redirectUri);
+		redirect.searchParams.set("code", "test_code");
+		redirect.searchParams.set("state", state);
 
-				const redirect = new URL(redirectUri);
-				redirect.searchParams.set("code", "test_code");
-				redirect.searchParams.set("state", state);
-
-				return Response.redirect(redirect.toString(), 302);
-			},
-			"/token": () =>
-				Response.json({
-					access_token: "AAAA_ACCESS_TOKEN",
-					token_type: "Bearer",
-					expires_in: 3600,
-					refresh_token: "aaaa_refresh_token",
-					scope: "create",
-				}),
-		},
+		return c.redirect(redirect.toString(), 302);
 	});
+	oauth2App.all("/token", (c) =>
+		c.json({
+			access_token: "AAAA_ACCESS_TOKEN",
+			token_type: "Bearer",
+			expires_in: 3600,
+			refresh_token: "aaaa_refresh_token",
+			scope: "create",
+		}),
+	);
+	const oauth2Server = await startApp(oauth2App);
+	cleanups.push(oauth2Server.stop);
 
-	const server = createServer({
-		serveOptions: { port: randomInteger(4000, 10000) },
+	const server = await createServer({
+		serveOptions: { port: 0 },
 		getHostConfig: async () => ({
 			getUpstreamCookies: async () =>
 				new Response("", {
 					headers: {
-						"Set-Cookie": new Bun.Cookie({
-							name: "test-cookie",
-							value: "test-value",
+						"Set-Cookie": serialize("test-cookie", "test-value", {
 							expires: new Date(),
-						}).serialize(),
+						}),
 					},
 				}),
 			validateUpstreamSession: async () => true,
@@ -98,6 +126,9 @@ const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 		},
 		db: new SessionDatabase(db),
 		...serverOverrides,
+	});
+	cleanups.push(async () => {
+		await server.stop(true);
 	});
 
 	const forwardAuthUrl = new URL("/oauth2/traefik", server.url);
@@ -121,8 +152,12 @@ const createTestServers = (serverOverrides: Partial<ServerOptions>) => {
 	};
 };
 
-describe(createServer, () => {
-	const testServers = createTestServers({});
+describe("createServer", () => {
+	let testServers: Awaited<ReturnType<typeof createTestServers>>;
+
+	beforeAll(async () => {
+		testServers = await createTestServers({});
+	});
 
 	it("returns 200 on /healthz", async () => {
 		const response = await fetch(new URL("/healthz", testServers.server.url));
@@ -150,23 +185,21 @@ describe(createServer, () => {
 		expect(location.origin).toBe(testServers.oauth2Server.url.origin);
 		expect(location.pathname).toBe("/authorize");
 
-		expect(location.searchParams).toEqual(
-			new URLSearchParams({
-				response_type: "code",
-				client_id: "test-client-id",
-				redirect_uri: new URL(
-					"/oauth2/callback",
-					testServers.server.url,
-				).toString(),
-				scope: "openid email",
-				state: location.searchParams.get("state") ?? "",
-			}),
-		);
+		expect(Object.fromEntries(location.searchParams)).toEqual({
+			response_type: "code",
+			client_id: "test-client-id",
+			redirect_uri: new URL(
+				"/oauth2/callback",
+				testServers.server.url,
+			).toString(),
+			scope: "openid email",
+			state: location.searchParams.get("state") ?? "",
+		});
 		expect(location.searchParams.get("state")).toBeDefined();
 	});
 
 	const completeOauth2Flow = async (
-		testServerImpl: ReturnType<typeof createTestServers>,
+		testServerImpl: Awaited<ReturnType<typeof createTestServers>>,
 		authorizeInit: SimpleRequestInit,
 	) => {
 		const initialResponse = await testServerImpl.fetchForwardAuth();
@@ -204,7 +237,7 @@ describe(createServer, () => {
 	});
 
 	it("handles upstream request errors", async () => {
-		const testServersWithUpstreamError = createTestServers({
+		const testServersWithUpstreamError = await createTestServers({
 			getHostConfig: async () => ({
 				getUpstreamCookies: async () => new Response("💥", { status: 502 }),
 				validateUpstreamSession: async () => true,
@@ -223,7 +256,7 @@ describe(createServer, () => {
 	});
 
 	it("handles upstream errors", async () => {
-		const testServersWithUpstreamError = createTestServers({
+		const testServersWithUpstreamError = await createTestServers({
 			getHostConfig: async (host) => {
 				throw new Error(`${host} config not found`);
 			},
@@ -239,16 +272,14 @@ describe(createServer, () => {
 	});
 
 	it("handles upstream revalidation", async () => {
-		const testServersWithUpstreamError = createTestServers({
+		const testServersWithUpstreamError = await createTestServers({
 			getHostConfig: async () => ({
 				getUpstreamCookies: async () =>
 					new Response("", {
 						headers: {
-							"Set-Cookie": new Bun.Cookie({
-								name: "test-cookie",
-								value: "test-value",
+							"Set-Cookie": serialize("test-cookie", "test-value", {
 								expires: new Date(),
-							}).serialize(),
+							}),
 						},
 					}),
 				// Simulate an upstream session validation error
@@ -293,9 +324,9 @@ describe(createServer, () => {
 		);
 		expect(okForwardAuthResponse.status).toBe(200);
 
-		testServers.db.run("DELETE FROM session WHERE id = ?", [
-			encodeSessionToken(sessionCookie.value),
-		]);
+		testServers.db
+			.prepare("DELETE FROM session WHERE id = ?")
+			.run(encodeSessionToken(sessionCookie.value));
 
 		const invalidSessionResponse = await testServers.fetchForwardAuth(
 			new URL("/", testServers.server.url),

@@ -1,19 +1,21 @@
-FROM oven/bun:1.3-alpine
+FROM node:24-alpine
 
-WORKDIR /home/bun/app
+RUN corepack enable
 
-COPY ./package.json /home/bun/app/package.json
-COPY ./bun.lock /home/bun/app/bun.lock
+WORKDIR /app
 
-RUN bun install --production --frozen-lockfile
+COPY ./package.json /app/package.json
+COPY ./pnpm-lock.yaml /app/pnpm-lock.yaml
 
-COPY ./tsconfig.json /home/bun/app/tsconfig.json
-COPY ./src /home/bun/app/src
+RUN pnpm install --prod --frozen-lockfile
+
+COPY ./tsconfig.json /app/tsconfig.json
+COPY ./src /app/src
 
 ENV NODE_ENV=production
 
-USER bun
+USER node
 EXPOSE 3000/tcp
 HEALTHCHECK --interval=5s --timeout=3s \
   CMD wget -qO - http://localhost:3000/healthz || exit 1
-ENTRYPOINT [ "bun", "run", "src/index.ts" ]
+ENTRYPOINT [ "node", "src/index.ts" ]

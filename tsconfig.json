@@ -1,6 +1,9 @@
 {
-	"extends": [
-		"@tsconfig/bun/tsconfig.json",
-		"@tsconfig/strictest/tsconfig.json"
-	]
+	"extends": "@nihalgonsalves/esconfig/tsconfig.shared.json",
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM"],
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"types": ["node"]
+	}
 }

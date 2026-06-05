@@ -1,6 +1,6 @@
-import { expect, it } from "bun:test";
+import { expect, it } from "vitest";
 
-import { generateSessionToken } from "./util";
+import { generateSessionToken } from "./util.ts";
 
 it("generates a session token", () => {
 	const token = generateSessionToken();

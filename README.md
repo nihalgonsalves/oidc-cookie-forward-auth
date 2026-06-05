@@ -138,7 +138,7 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
    	// use any URL that is only accessible when logged in.
    	// this enables the user to use logout functionality inside the origin
    	// app and seamlessly invalidate the OIDC session too.
-   	validateUpstreamSession: async (headers: Bun.HeadersInit) => {
+   	validateUpstreamSession: async (headers: HeadersInit) => {
    		try {
    			const response = await fetch(new URL("http://whoami:80/me"), {
    				headers,

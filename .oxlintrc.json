@@ -1,5 +1,6 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"extends": ["node_modules/@nihalgonsalves/esconfig/.oxlintrc.json"],
-	"plugins": ["node", "oxc", "unicorn"]
+	"plugins": ["node", "oxc", "unicorn"],
+	"rules": { "import/extensions": "off" }
 }

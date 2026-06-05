@@ -1,7 +1,14 @@
-import type { Database } from "bun:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 import { sha256 } from "@oslojs/crypto/sha2";
 import { encodeHexLowerCase } from "@oslojs/encoding";
+import { z } from "zod";
+
+const SessionRowSchema = z.object({
+	id: z.string(),
+	expires_at: z.number(),
+	upstream_cookies: z.string(),
+});
 
 const CREATE_SESSION_TABLE_SQL = `
 	CREATE TABLE IF NOT EXISTS session (
@@ -21,11 +28,11 @@ export const encodeSessionToken = (token: string): string =>
 	encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
 
 export class SessionDatabase {
-	#db: Database;
+	#db: DatabaseSync;
 
-	constructor(db: Database) {
+	constructor(db: DatabaseSync) {
 		this.#db = db;
-		this.#db.run(CREATE_SESSION_TABLE_SQL);
+		this.#db.exec(CREATE_SESSION_TABLE_SQL);
 	}
 
 	createSession = (token: string, upstreamCookies: string): Session => {
@@ -40,7 +47,7 @@ export class SessionDatabase {
 		};
 
 		this.#db
-			.query(
+			.prepare(
 				"INSERT INTO session (id, expires_at, upstream_cookies) VALUES (?, ?, ?)",
 			)
 			.run(
@@ -57,12 +64,13 @@ export class SessionDatabase {
 			sha256(new TextEncoder().encode(token)),
 		);
 
-		const row = this.#db
-			.query<
-				{ id: string; expires_at: number; upstream_cookies: string },
-				string
-			>("SELECT id, expires_at, upstream_cookies FROM session WHERE id = ?")
-			.get(sessionId);
+		const row = SessionRowSchema.nullable().parse(
+			this.#db
+				.prepare(
+					"SELECT id, expires_at, upstream_cookies FROM session WHERE id = ?",
+				)
+				.get(sessionId) ?? null,
+		);
 
 		if (row == null) {
 			return null;
@@ -75,16 +83,14 @@ export class SessionDatabase {
 		};
 
 		if (Date.now() >= session.expiresAt.getTime()) {
-			this.#db
-				.query("DELETE FROM session WHERE id = $id")
-				.run({ id: session.id });
+			this.#db.prepare("DELETE FROM session WHERE id = ?").run(session.id);
 			return null;
 		}
 
 		if (Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15) {
 			session.expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
 			this.#db
-				.query("UPDATE session SET expires_at = ? WHERE id = ?")
+				.prepare("UPDATE session SET expires_at = ? WHERE id = ?")
 				.run(Math.floor(session.expiresAt.getTime() / 1000), session.id);
 		}
 
@@ -92,6 +98,6 @@ export class SessionDatabase {
 	};
 
 	invalidateSession = (sessionId: string): void => {
-		this.#db.query("DELETE FROM session WHERE id = ?").run(sessionId);
+		this.#db.prepare("DELETE FROM session WHERE id = ?").run(sessionId);
 	};
 }

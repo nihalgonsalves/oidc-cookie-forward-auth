@@ -7,7 +7,7 @@ export const config = {
 				password: "password",
 			}),
 		}),
-	validateUpstreamSession: async (headers: Bun.HeadersInit) => {
+	validateUpstreamSession: async (headers: HeadersInit) => {
 		try {
 			const response = await fetch(new URL("http://whoami:80/me"), {
 				headers,

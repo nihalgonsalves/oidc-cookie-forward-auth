@@ -1,17 +1,18 @@
-import { Database } from "bun:sqlite";
+import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 
 import {
 	COOKIE_SECURE,
 	DOMAIN_BASE,
 	OIDC_OPTIONS,
 	SQLITE_PATH,
-} from "./config";
-import { createServer, type HostConfig } from "./create-server";
-import { SessionDatabase } from "./db";
+} from "./config.ts";
+import { createServer, type HostConfig } from "./create-server.ts";
+import { SessionDatabase } from "./db.ts";
 
 const hostCache = new Map<string, HostConfig>();
 
-const server = createServer({
+const server = await createServer({
 	oidcOptions: OIDC_OPTIONS,
 	cookieOptions: {
 		secure: COOKIE_SECURE,
@@ -28,7 +29,9 @@ const server = createServer({
 
 		try {
 			// oxlint-disable typescript/no-unsafe-assignment, typescript/no-unsafe-return, typescript/no-unsafe-argument
-			const { config } = await import(`/var/lib/oidc/config/${filename}.ts`);
+			const { config } = await import(
+				pathToFileURL(`/var/lib/oidc/config/${filename}.ts`).href
+			);
 
 			hostCache.set(name, config);
 			return config;
@@ -40,9 +43,7 @@ const server = createServer({
 			);
 		}
 	},
-	db: new SessionDatabase(
-		new Database(SQLITE_PATH ?? ":memory:", { strict: true }),
-	),
+	db: new SessionDatabase(new DatabaseSync(SQLITE_PATH ?? ":memory:")),
 });
 
 console.log(`Forward-auth server listening on ${server.url.toString()}`);
