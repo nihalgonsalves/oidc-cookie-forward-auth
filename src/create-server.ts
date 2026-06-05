@@ -1,8 +1,11 @@
 import { serve, type ServerType } from "@hono/node-server";
+import { structuredLogger } from "@hono/structured-logger";
 import * as arctic from "arctic";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { requestId } from "hono/request-id";
 import type { CookieOptions } from "hono/utils/cookie";
+import pino from "pino";
 import * as setCookieParser from "set-cookie-parser";
 import { z } from "zod";
 
@@ -228,7 +231,16 @@ export const createServer = async ({
 		return c.body("OK", 200, headers);
 	};
 
+	const rootLogger = pino();
+
 	const app = new Hono();
+
+	app.use(requestId());
+	app.use(
+		structuredLogger({
+			createLogger: (c) => rootLogger.child({ requestId: c.var.requestId }),
+		}),
+	);
 
 	app.get("/healthz", (c) => c.text("OK", 200));
 
