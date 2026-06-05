@@ -8,16 +8,13 @@ const ZEnvSchema = z.object({
 	OIDC_ISSUER_CONFIG_URL: zUrl,
 	SQLITE_PATH: z.string().min(1).optional(),
 	DOMAIN_BASE: z.string().min(1).startsWith(".").optional(),
-	UNSAFE_COOKIE_INSECURE: z
-		.union([z.literal("true"), z.literal("1")])
-		.optional(),
+	UNSAFE_COOKIE_INSECURE: z.stringbool().optional().default(false),
 });
 
 const env = ZEnvSchema.parse(process.env);
 export const { SQLITE_PATH, DOMAIN_BASE } = env;
 
-export const COOKIE_SECURE =
-	env.UNSAFE_COOKIE_INSECURE !== "true" && env.UNSAFE_COOKIE_INSECURE !== "1";
+export const COOKIE_SECURE = !env.UNSAFE_COOKIE_INSECURE;
 
 const oidcConfigResponse = await fetch(env.OIDC_ISSUER_CONFIG_URL);
 if (!oidcConfigResponse.ok) {
