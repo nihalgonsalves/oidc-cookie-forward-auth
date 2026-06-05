@@ -1,0 +1,16 @@
+# https://github.com/evilmartians/lefthook/blob/master/docs/configuration.md
+
+pre-commit:
+  parallel: true
+  commands:
+    oxlint:
+      glob: "*.{js,ts,jsx,tsx,mjs,mts,cjs,cts}"
+      run: pnpm oxlint {staged_files}
+      stage_fixed: true
+    oxfmt:
+      glob: "*.{js,ts,jsx,tsx,mjs,mts,cjs,cts,json,yml,yaml,md}"
+      run: pnpm oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    typescript:
+      glob: "*.{js,ts,jsx,tsx,mjs,mts,cjs,cts}"
+      run: pnpm typecheck
