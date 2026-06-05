@@ -249,6 +249,10 @@ export const createServer = async ({
 		}
 
 		if (forwardedUrl.pathname === logoutPath) {
+			const sessionToken = getCookie(c, SESSION_COOKIE_NAME);
+			if (sessionToken) {
+				db.invalidateSession(sessionToken);
+			}
 			deleteCookie(c, SESSION_COOKIE_NAME, mergedCookieOptions);
 
 			return c.body(

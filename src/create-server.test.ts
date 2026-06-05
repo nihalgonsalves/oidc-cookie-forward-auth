@@ -293,6 +293,19 @@ describe("createServer", () => {
 			{},
 		);
 
+		const sessionCookie = getCookiesFromResponse(authorizeResponse).find(
+			(cookie) => cookie.name === "session",
+		);
+		expectToBeNotNullish(sessionCookie);
+		const sessionId = encodeSessionToken(sessionCookie.value);
+
+		// The session row exists after authenticating
+		expect(
+			testServersWithUpstreamError.db
+				.prepare("SELECT id FROM session WHERE id = ?")
+				.get(sessionId),
+		).toBeDefined();
+
 		// But revalidating the session when making a normal forward-auth request fails
 		const finalResponse = await testServersWithUpstreamError.fetchForwardAuth(
 			undefined,
@@ -305,6 +318,13 @@ describe("createServer", () => {
 			},
 		);
 		expect(finalResponse.status).toBe(302);
+
+		// ...and the server-side session must be deleted, not just the cookie
+		expect(
+			testServersWithUpstreamError.db
+				.prepare("SELECT id FROM session WHERE id = ?")
+				.get(sessionId),
+		).toBeUndefined();
 	});
 
 	it("handles invalid sessions", async () => {
@@ -357,6 +377,19 @@ describe("createServer", () => {
 		const upstreamCookies = finalResponse.headers.get("cookie");
 		expect(upstreamCookies).toBe("test-cookie=test-value");
 
+		const sessionCookie = getCookiesFromResponse(authorizeResponse).find(
+			(cookie) => cookie.name === "session",
+		);
+		expectToBeNotNullish(sessionCookie);
+		const sessionId = encodeSessionToken(sessionCookie.value);
+
+		// The session row exists while logged in
+		expect(
+			testServers.db
+				.prepare("SELECT id FROM session WHERE id = ?")
+				.get(sessionId),
+		).toBeDefined();
+
 		// 5. Log out
 		const logoutResponse = await testServers.fetchForwardAuth(
 			new URL("/oauth2/logout", testServers.server.url),
@@ -373,5 +406,12 @@ describe("createServer", () => {
 			`Logged out successfully. Go to ${testServers.server.url.origin} to log in again.`,
 		);
 		expect(logoutResponse.headers.get("Clear-Site-Data")).toBe('"cookies"');
+
+		// ...and logging out must delete the server-side session, not just the cookie
+		expect(
+			testServers.db
+				.prepare("SELECT id FROM session WHERE id = ?")
+				.get(sessionId),
+		).toBeUndefined();
 	});
 });

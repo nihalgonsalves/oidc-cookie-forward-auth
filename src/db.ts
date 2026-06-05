@@ -92,7 +92,9 @@ export class SessionDatabase {
 		return session;
 	};
 
-	invalidateSession = (sessionId: string): void => {
-		this.#db.prepare("DELETE FROM session WHERE id = ?").run(sessionId);
+	invalidateSession = (token: string): void => {
+		this.#db
+			.prepare("DELETE FROM session WHERE id = ?")
+			.run(encodeSessionToken(token));
 	};
 }
