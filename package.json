@@ -23,7 +23,7 @@
 		"cookie": "^1.1.1",
 		"lefthook": "^2.1.9",
 		"oxfmt": "^0.53.0",
-		"oxlint": "^1.68.0",
+		"oxlint": "^1.72.0",
 		"oxlint-tsgolint": "^0.23.0",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.8"
