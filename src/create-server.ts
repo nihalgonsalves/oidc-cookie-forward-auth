@@ -137,7 +137,7 @@ export const createServer = async ({
 			await getClient(forwardedUrl).validateAuthorizationCode(
 				oidcOptions.tokenEndpoint,
 				code,
-				arctic.generateCodeVerifier(),
+				null,
 			);
 
 			const token = generateSessionToken();
