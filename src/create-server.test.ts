@@ -78,6 +78,7 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 	const db = new DatabaseSync(":memory:");
 
 	const oauth2App = new Hono();
+	let tokenRequest: URLSearchParams | undefined;
 	oauth2App.get("/authorize", (c) => {
 		const redirectUri = c.req.query("redirect_uri");
 		const state = c.req.query("state");
@@ -92,15 +93,17 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 
 		return c.redirect(redirect.toString(), 302);
 	});
-	oauth2App.all("/token", (c) =>
-		c.json({
+	oauth2App.post("/token", async (c) => {
+		tokenRequest = new URLSearchParams(await c.req.text());
+
+		return c.json({
 			access_token: "AAAA_ACCESS_TOKEN",
 			token_type: "Bearer",
 			expires_in: 3600,
 			refresh_token: "aaaa_refresh_token",
 			scope: "create",
-		}),
-	);
+		});
+	});
 	const oauth2Server = await startApp(oauth2App);
 	cleanups.push(oauth2Server.stop);
 
@@ -148,6 +151,7 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 		oauth2Server,
 		forwardAuthUrl,
 		fetchForwardAuth,
+		getTokenRequest: () => tokenRequest,
 		db,
 	};
 };
@@ -361,6 +365,11 @@ describe("createServer", () => {
 
 	it("successfully verifies an oauth2 token, authorizes a forward-auth response, and logs out", async () => {
 		const { authorizeResponse } = await completeOauth2Flow(testServers, {});
+		const tokenRequest = testServers.getTokenRequest();
+		expectToBeNotNullish(tokenRequest);
+		expect(tokenRequest.get("grant_type")).toBe("authorization_code");
+		expect(tokenRequest.get("code")).toBe("test_code");
+		expect(tokenRequest.has("code_verifier")).toBe(false);
 
 		const finalResponse = await testServers.fetchForwardAuth(undefined, {
 			headers: {
