@@ -12,8 +12,8 @@ importers:
         specifier: ^2.0.12
         version: 2.0.12(hono@4.12.32)
       '@hono/structured-logger':
-        specifier: ^0.1.0
-        version: 0.1.0(hono@4.12.32)
+        specifier: ^1.0.0
+        version: 1.0.0(hono@4.12.32)
       arctic:
         specifier: ^3.7.0
         version: 3.7.0
@@ -75,8 +75,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hono/structured-logger@0.1.0':
-    resolution: {integrity: sha512-06QUXbNnvb6lSJz/79WcC8yhGCbWT4EO2Zq3rodzQLwUT40OVXNerCKXUcwv4KgVZGKhVebzv1Vr84w/GKEl6Q==}
+  '@hono/structured-logger@1.0.0':
+    resolution: {integrity: sha512-MozQvH7oFsi/Pc/0sK6ai7cYpDX81t4UnrxgOo/MslfC7lPFnRcvayVkY3g1Wi/cX6dFmtLhZoGALOfdvAIDgA==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
       hono: '>=4.0.0'
@@ -1120,7 +1120,7 @@ snapshots:
     dependencies:
       hono: 4.12.32
 
-  '@hono/structured-logger@0.1.0(hono@4.12.32)':
+  '@hono/structured-logger@1.0.0(hono@4.12.32)':
     dependencies:
       hono: 4.12.32
 

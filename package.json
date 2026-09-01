@@ -10,7 +10,7 @@
 	},
 	"dependencies": {
 		"@hono/node-server": "^2.0.12",
-		"@hono/structured-logger": "^0.1.0",
+		"@hono/structured-logger": "^1.0.0",
 		"arctic": "^3.7.0",
 		"hono": "^4.12.32",
 		"pino": "^10.3.1",
