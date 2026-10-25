@@ -21,7 +21,7 @@
 		"@nihalgonsalves/esconfig": "^0.18.0",
 		"@types/node": "^24.13.0",
 		"cookie": "^1.1.1",
-		"lefthook": "^2.1.10",
+		"lefthook": "^2.1.12",
 		"oxfmt": "^0.61.0",
 		"oxlint": "^1.76.0",
 		"oxlint-tsgolint": "^7.0.2001",
