@@ -9,27 +9,27 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@hono/node-server": "^2.0.12",
-		"@hono/structured-logger": "^0.1.0",
+		"@hono/node-server": "^2.1.8",
+		"@hono/structured-logger": "^1.0.0",
 		"arctic": "^3.7.0",
-		"hono": "^4.13.5",
-		"pino": "^10.3.1",
-		"set-cookie-parser": "^3.1.2",
-		"zod": "^4.4.3"
+		"hono": "^4.13.18",
+		"pino": "^10.4.0",
+		"set-cookie-parser": "^3.2.2",
+		"zod": "^4.6.7"
 	},
 	"devDependencies": {
-		"@nihalgonsalves/esconfig": "^0.18.0",
-		"@types/node": "^24.13.0",
-		"cookie": "^1.1.1",
-		"lefthook": "^2.1.12",
-		"oxfmt": "^0.61.0",
-		"oxlint": "^1.76.0",
-		"oxlint-tsgolint": "^7.0.2001",
+		"@nihalgonsalves/esconfig": "^0.18.2",
+		"@types/node": "^26.6.6",
+		"cookie": "^2.0.2",
+		"lefthook": "^2.2.2",
+		"oxfmt": "^0.78.0",
+		"oxlint": "^1.93.0",
+		"oxlint-tsgolint": "^7.0.2007",
 		"typescript": "^7.0.2",
-		"vitest": "^4.1.11"
+		"vitest": "^5.1.0"
 	},
 	"engines": {
-		"node": ">=24"
+		"node": ">=26"
 	},
-	"packageManager": "pnpm@11.18.0"
+	"packageManager": "pnpm@12.18.0"
 }
