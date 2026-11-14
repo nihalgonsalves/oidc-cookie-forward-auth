@@ -239,6 +239,35 @@ export const createServer = async ({
 	app.use(
 		structuredLogger({
 			createLogger: (c) => rootLogger.child({ requestId: c.var.requestId }),
+			onRequest: (logger, c) => {
+				logger.info(
+					{ method: c.req.method, path: c.req.path },
+					"request start",
+				);
+			},
+			onResponse: (logger, c, elapsedMs) => {
+				logger.info(
+					{
+						method: c.req.method,
+						path: c.req.path,
+						status: c.res.status,
+						elapsedMs,
+					},
+					"request end",
+				);
+			},
+			onError: (logger, err, c, elapsedMs) => {
+				logger.error(
+					{
+						err,
+						method: c.req.method,
+						path: c.req.path,
+						status: c.res.status,
+						elapsedMs,
+					},
+					"request error",
+				);
+			},
 		}),
 	);
 

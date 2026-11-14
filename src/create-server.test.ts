@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 
 import { serve, type ServerType } from "@hono/node-server";
-import { serialize } from "cookie";
+import { stringifySetCookie } from "cookie";
 import { Hono } from "hono";
 import * as setCookieParser from "set-cookie-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -113,7 +113,9 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 			getUpstreamCookies: async () =>
 				new Response("", {
 					headers: {
-						"Set-Cookie": serialize("test-cookie", "test-value", {
+						"Set-Cookie": stringifySetCookie({
+							name: "test-cookie",
+							value: "test-value",
 							expires: new Date(),
 						}),
 					},
@@ -281,7 +283,9 @@ describe("createServer", () => {
 				getUpstreamCookies: async () =>
 					new Response("", {
 						headers: {
-							"Set-Cookie": serialize("test-cookie", "test-value", {
+							"Set-Cookie": stringifySetCookie({
+								name: "test-cookie",
+								value: "test-value",
 								expires: new Date(),
 							}),
 						},
