@@ -14,7 +14,7 @@ services:
   traefik:
     depends_on:
       - socket-proxy
-    image: "traefik:3.5"
+    image: "traefik:3.7"
     restart: always
     env_file:
       - .env.traefik
@@ -45,15 +45,17 @@ services:
       - "443:443/udp"
 
   pocket-id:
-    image: ghcr.io/pocket-id/pocket-id:v1
+    image: ghcr.io/pocket-id/pocket-id:v2
     restart: unless-stopped
+    cap_drop: [all]
+    security_opt: [no-new-privileges:true]
     expose:
       - 1411
     volumes:
       - "pocket-id-db:/app/data"
     environment:
       APP_URL: https://auth.$DOMAIN
-      TRUST_PROXY: true
+      TRUSTED_PLATFORM: X-Real-Ip
       # MAXMIND_LICENSE_KEY:
     healthcheck:
       test: ["CMD", "/app/pocket-id", "healthcheck"]
@@ -70,6 +72,9 @@ services:
     depends_on:
       pocket-id:
         condition: service_healthy
+    read_only: true
+    cap_drop: [all]
+    security_opt: [no-new-privileges:true]
     restart: unless-stopped
     build:
       context: ./

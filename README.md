@@ -50,8 +50,8 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
 
 ### Step-by-step
 
-> [!TIP] There's a complete example in the
-> [./docs/example/ directory](./docs/example/)
+> [!TIP]
+> There's a complete example in the [./docs/example/ directory](./docs/example/)
 
 1. Make sure you have
    [Traefik set up with SSL](https://doc.traefik.io/traefik/https/overview/)
@@ -76,6 +76,9 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
        # depends_on:
        #   pocket-id:
        #     condition: service_healthy
+       read_only: true
+       cap_drop: [all]
+       security_opt: [no-new-privileges:true]
        restart: unless-stopped
        env_file:
          # this file should contain:
@@ -98,20 +101,6 @@ For example, if you have `https://whoami.example.com`, set your `DOMAIN_BASE` to
          traefik.enable: true
          traefik.http.middlewares.oidc-cookie-forward-auth.forwardauth.address: http://oidc-cookie-forward-auth:3000/oauth2/traefik
          traefik.http.middlewares.oidc-cookie-forward-auth.forwardauth.authResponseHeaders: cookie
-
-   # ...
-
-   whoami:
-     depends_on:
-       oidc-cookie-forward-auth:
-         condition: service_healthy
-     image: traefik/whoami:latest
-     restart: unless-stopped
-     labels:
-       traefik.enable: true
-       traefik.http.routers.whoami.rule: Host(`whoami.example.com`)
-       traefik.http.routers.whoami.entrypoints: websecure
-       traefik.http.routers.whoami.middlewares: oidc-cookie-forward-auth
 
    volumes:
      oidc-db:
