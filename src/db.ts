@@ -17,9 +17,15 @@ const CREATE_SESSION_TABLE_SQL = `
 	);
 `;
 
+export const SESSION_TTL = Temporal.Duration.from({ hours: 24 * 30 });
+const SESSION_RENEW_THRESHOLD = Temporal.Duration.from({ hours: 24 * 15 });
+
+const toEpochSeconds = (instant: Temporal.Instant): number =>
+	Math.floor(instant.epochMilliseconds / 1000);
+
 type Session = {
 	id: string;
-	expiresAt: Date;
+	expiresAt: Temporal.Instant;
 	upstreamCookies: string;
 };
 
@@ -39,7 +45,7 @@ export class SessionDatabase {
 
 		const session: Session = {
 			id: sessionId,
-			expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+			expiresAt: Temporal.Now.instant().add(SESSION_TTL),
 			upstreamCookies,
 		};
 
@@ -47,11 +53,7 @@ export class SessionDatabase {
 			.prepare(
 				"INSERT INTO session (id, expires_at, upstream_cookies) VALUES (?, ?, ?)",
 			)
-			.run(
-				session.id,
-				Math.floor(session.expiresAt.getTime() / 1000),
-				upstreamCookies,
-			);
+			.run(session.id, toEpochSeconds(session.expiresAt), upstreamCookies);
 
 		return session;
 	};
@@ -73,20 +75,27 @@ export class SessionDatabase {
 
 		const session: Session = {
 			id: row.id,
-			expiresAt: new Date(row.expires_at * 1000),
+			expiresAt: Temporal.Instant.fromEpochMilliseconds(row.expires_at * 1000),
 			upstreamCookies: row.upstream_cookies,
 		};
 
-		if (Date.now() >= session.expiresAt.getTime()) {
+		const now = Temporal.Now.instant();
+
+		if (Temporal.Instant.compare(now, session.expiresAt) >= 0) {
 			this.#db.prepare("DELETE FROM session WHERE id = ?").run(session.id);
 			return null;
 		}
 
-		if (Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15) {
-			session.expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+		if (
+			Temporal.Instant.compare(
+				now,
+				session.expiresAt.subtract(SESSION_RENEW_THRESHOLD),
+			) >= 0
+		) {
+			session.expiresAt = now.add(SESSION_TTL);
 			this.#db
 				.prepare("UPDATE session SET expires_at = ? WHERE id = ?")
-				.run(Math.floor(session.expiresAt.getTime() / 1000), session.id);
+				.run(toEpochSeconds(session.expiresAt), session.id);
 		}
 
 		return session;

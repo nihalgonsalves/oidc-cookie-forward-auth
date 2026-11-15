@@ -9,7 +9,7 @@ import pino from "pino";
 import * as setCookieParser from "set-cookie-parser";
 import { z } from "zod";
 
-import type { SessionDatabase } from "./db.ts";
+import { SESSION_TTL, type SessionDatabase } from "./db.ts";
 import { generateSessionToken } from "./util.ts";
 
 type OIDCOptions = {
@@ -69,6 +69,8 @@ const CookieInitSchema = z.object({
 	maxAge: z.number().exactOptional(),
 });
 
+const OAUTH_FLOW_TTL = Temporal.Duration.from({ minutes: 10 });
+
 const getCookieHeader = (cookies: { name: string; value: string }[]) =>
 	cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 
@@ -111,11 +113,11 @@ export const createServer = async ({
 
 		setCookie(c, STATE_COOKIE_NAME, state, {
 			...mergedCookieOptions,
-			maxAge: 60 * 10, // 10 minutes
+			maxAge: OAUTH_FLOW_TTL.total("seconds"),
 		});
 		setCookie(c, PKCE_COOKIE_NAME, codeVerifier, {
 			...mergedCookieOptions,
-			maxAge: 60 * 10, // 10 minutes
+			maxAge: OAUTH_FLOW_TTL.total("seconds"),
 		});
 
 		return c.redirect(url.toString(), 302);
@@ -165,7 +167,7 @@ export const createServer = async ({
 
 			const maxAge = Math.min(
 				...cookies.map((cookie) => cookie.maxAge ?? Infinity),
-				60 * 60 * 24 * 30, // 30 days
+				SESSION_TTL.total("seconds"),
 			);
 
 			db.createSession(
