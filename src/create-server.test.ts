@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { serve, type ServerType } from "@hono/node-server";
 import { stringifySetCookie } from "cookie";
 import { Hono } from "hono";
+import * as client from "openid-client";
 import * as setCookieParser from "set-cookie-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -74,11 +76,21 @@ type SimpleRequestInit = {
 	headers?: Record<string, string>;
 };
 
-const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
+type OIDCOverrides = {
+	tokenEndpoint?: string;
+	timeout?: number;
+};
+
+const createTestServers = async (
+	serverOverrides: Partial<ServerOptions>,
+	oidcOverrides: OIDCOverrides = {},
+) => {
 	const db = new DatabaseSync(":memory:");
 
 	const oauth2App = new Hono();
 	let tokenRequest: URLSearchParams | undefined;
+	let tokenRequestAuthorization: string | undefined;
+	let codeChallenge: string | undefined;
 	oauth2App.get("/authorize", (c) => {
 		const redirectUri = c.req.query("redirect_uri");
 		const state = c.req.query("state");
@@ -87,14 +99,39 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 			return c.text("Missing redirect_uri or state", 400);
 		}
 
+		if (c.req.query("code_challenge_method") !== "S256") {
+			return c.text("Missing or unsupported code_challenge_method", 400);
+		}
+		codeChallenge = c.req.query("code_challenge");
+
 		const redirect = new URL(redirectUri);
 		redirect.searchParams.set("code", "test_code");
 		redirect.searchParams.set("state", state);
 
 		return c.redirect(redirect.toString(), 302);
 	});
+	oauth2App.post(
+		"/token-hang",
+		async () =>
+			new Promise<Response>(() => {
+				// Never responds, to exercise the client timeout
+			}),
+	);
 	oauth2App.post("/token", async (c) => {
 		tokenRequest = new URLSearchParams(await c.req.text());
+		tokenRequestAuthorization = c.req.header("authorization");
+
+		const codeVerifier = tokenRequest.get("code_verifier");
+		if (
+			!codeVerifier ||
+			createHash("sha256").update(codeVerifier).digest("base64url") !==
+				codeChallenge
+		) {
+			return c.json(
+				{ error: "invalid_grant", error_description: "PKCE failed" },
+				400,
+			);
+		}
 
 		return c.json({
 			access_token: "AAAA_ACCESS_TOKEN",
@@ -106,6 +143,28 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 	});
 	const oauth2Server = await startApp(oauth2App);
 	cleanups.push(oauth2Server.stop);
+
+	const oidcConfig = new client.Configuration(
+		{
+			issuer: oauth2Server.url.origin,
+			authorization_endpoint: new URL(
+				"/authorize",
+				oauth2Server.url,
+			).toString(),
+			token_endpoint: new URL(
+				oidcOverrides.tokenEndpoint ?? "/token",
+				oauth2Server.url,
+			).toString(),
+		},
+		"test-client-id",
+		"test-client-secret",
+	);
+	// The mock provider is plain HTTP
+	// oxlint-disable-next-line typescript/no-deprecated
+	client.allowInsecureRequests(oidcConfig);
+	if (oidcOverrides.timeout !== undefined) {
+		oidcConfig.timeout = oidcOverrides.timeout;
+	}
 
 	const server = await createServer({
 		serveOptions: { port: 0 },
@@ -123,10 +182,7 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 			validateUpstreamSession: async () => true,
 		}),
 		oidcOptions: {
-			clientId: "test-client-id",
-			clientSecret: "test-client-secret",
-			tokenEndpoint: new URL("/token", oauth2Server.url).toString(),
-			authorizationEndpoint: new URL("/authorize", oauth2Server.url).toString(),
+			config: oidcConfig,
 			scopes: ["openid", "email"],
 		},
 		db: new SessionDatabase(db),
@@ -154,6 +210,7 @@ const createTestServers = async (serverOverrides: Partial<ServerOptions>) => {
 		forwardAuthUrl,
 		fetchForwardAuth,
 		getTokenRequest: () => tokenRequest,
+		getTokenRequestAuthorization: () => tokenRequestAuthorization,
 		db,
 	};
 };
@@ -200,7 +257,10 @@ describe("createServer", () => {
 			).toString(),
 			scope: "openid email",
 			state: location.searchParams.get("state") ?? "",
+			code_challenge: location.searchParams.get("code_challenge") ?? "",
+			code_challenge_method: "S256",
 		});
+		expect(location.searchParams.get("code_challenge")).toMatch(/^[\w-]{43}$/);
 		expect(location.searchParams.get("state")).toBeDefined();
 	});
 
@@ -229,6 +289,87 @@ describe("createServer", () => {
 			),
 		};
 	};
+
+	const completeOauth2FlowWithServers = async (
+		testServerImpl: Awaited<ReturnType<typeof createTestServers>>,
+	) => (await completeOauth2Flow(testServerImpl, {})).authorizeResponse;
+
+	const completeOauth2FlowWithPkceCookie = async (
+		mapPkceCookie: (cookie: setCookieParser.Cookie) => setCookieParser.Cookie[],
+	) => {
+		const initialResponse = await testServers.fetchForwardAuth();
+		const authResponse = await fetch(getRedirectLocation(initialResponse), {
+			redirect: "manual",
+		});
+		const cookies = getCookiesFromResponse(initialResponse).flatMap((cookie) =>
+			cookie.name === "pkce" ? mapPkceCookie(cookie) : [cookie],
+		);
+		return testServers.fetchForwardAuth(getRedirectLocation(authResponse), {
+			headers: { cookie: getClientCookieHeader(cookies) },
+		});
+	};
+
+	it("returns an error if the PKCE verifier cookie is missing", async () => {
+		const response = await completeOauth2FlowWithPkceCookie(() => []);
+		expect(response.status).toBe(400);
+		expect(await response.text()).toBe(
+			"Invalid state or missing code. Please try again.",
+		);
+	});
+
+	it("returns an error if the PKCE verifier does not match the challenge", async () => {
+		const response = await completeOauth2FlowWithPkceCookie((cookie) => [
+			{ ...cookie, value: "x".repeat(43) },
+		]);
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe("Error: invalid_grant");
+	});
+
+	it("returns the provider's error if authorization was denied", async () => {
+		const initialResponse = await testServers.fetchForwardAuth();
+		const state = new URL(
+			getRedirectLocation(initialResponse),
+		).searchParams.get("state");
+		expectToBeNotNullish(state);
+
+		const callbackUrl = new URL("/oauth2/callback", testServers.server.url);
+		callbackUrl.searchParams.set("error", "access_denied");
+		callbackUrl.searchParams.set("state", state);
+
+		const response = await testServers.fetchForwardAuth(callbackUrl, {
+			headers: {
+				cookie: getClientCookieHeader(getCookiesFromResponse(initialResponse)),
+			},
+		});
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe("Error: access_denied");
+	});
+
+	it("returns 502 if the token endpoint is unreachable", async () => {
+		// Grab a free port, then close it so connections are refused
+		const closed = await startApp(new Hono());
+		await closed.stop();
+
+		const response = await completeOauth2FlowWithServers(
+			await createTestServers(
+				{},
+				{ tokenEndpoint: new URL("/token", closed.url).toString() },
+			),
+		);
+		expect(response.status).toBe(502);
+		expect(await response.text()).toMatch(/^Error: .*ECONNREFUSED/);
+	});
+
+	it("returns 504 if the token endpoint times out", async () => {
+		const response = await completeOauth2FlowWithServers(
+			await createTestServers(
+				{},
+				{ tokenEndpoint: "/token-hang", timeout: 0.2 },
+			),
+		);
+		expect(response.status).toBe(504);
+		expect(await response.text()).toBe("Error: identity provider timed out");
+	});
 
 	it("returns an error if the state does not match", async () => {
 		const { authorizeResponse } = await completeOauth2Flow(testServers, {
@@ -373,7 +514,10 @@ describe("createServer", () => {
 		expectToBeNotNullish(tokenRequest);
 		expect(tokenRequest.get("grant_type")).toBe("authorization_code");
 		expect(tokenRequest.get("code")).toBe("test_code");
-		expect(tokenRequest.has("code_verifier")).toBe(false);
+		expect(tokenRequest.get("code_verifier")).toMatch(/^[\w-]{43}$/);
+		expect(tokenRequest.get("client_id")).toBe("test-client-id");
+		expect(tokenRequest.get("client_secret")).toBe("test-client-secret");
+		expect(testServers.getTokenRequestAuthorization()).toBeUndefined();
 
 		const finalResponse = await testServers.fetchForwardAuth(undefined, {
 			headers: {

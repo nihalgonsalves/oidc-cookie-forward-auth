@@ -1,10 +1,10 @@
 import { serve, type ServerType } from "@hono/node-server";
 import { structuredLogger } from "@hono/structured-logger";
-import * as arctic from "arctic";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { requestId } from "hono/request-id";
 import type { CookieOptions } from "hono/utils/cookie";
+import * as client from "openid-client";
 import pino from "pino";
 import * as setCookieParser from "set-cookie-parser";
 import { z } from "zod";
@@ -13,10 +13,7 @@ import type { SessionDatabase } from "./db.ts";
 import { generateSessionToken } from "./util.ts";
 
 type OIDCOptions = {
-	clientId: string;
-	clientSecret: string;
-	tokenEndpoint: string;
-	authorizationEndpoint: string;
+	config: client.Configuration;
 	scopes: string[];
 };
 
@@ -91,28 +88,32 @@ export const createServer = async ({
 	};
 
 	const STATE_COOKIE_NAME = mergedCookieOptions.secure
-		? "__Host-state"
+		? "__Host-Http-state"
 		: "state";
+	const PKCE_COOKIE_NAME = mergedCookieOptions.secure
+		? "__Host-Http-pkce"
+		: "pkce";
 	const SESSION_COOKIE_NAME = mergedCookieOptions.secure
-		? "__Host-session"
+		? "__Host-Http-session"
 		: "session";
 
-	const getClient = (forwardedUrl: URL) =>
-		new arctic.OAuth2Client(
-			oidcOptions.clientId,
-			oidcOptions.clientSecret,
-			new URL(callbackPath, forwardedUrl.origin).toString(),
-		);
-
-	const redirectToAuth = (c: Context, forwardedUrl: URL) => {
-		const state = arctic.generateState();
-		const url = getClient(forwardedUrl).createAuthorizationURL(
-			oidcOptions.authorizationEndpoint,
+	const redirectToAuth = async (c: Context, forwardedUrl: URL) => {
+		const state = client.randomState();
+		const codeVerifier = client.randomPKCECodeVerifier();
+		const url = client.buildAuthorizationUrl(oidcOptions.config, {
+			response_type: "code",
+			redirect_uri: new URL(callbackPath, forwardedUrl.origin).toString(),
+			scope: oidcOptions.scopes.join(" "),
 			state,
-			oidcOptions.scopes,
-		);
+			code_challenge: await client.calculatePKCECodeChallenge(codeVerifier),
+			code_challenge_method: "S256",
+		});
 
 		setCookie(c, STATE_COOKIE_NAME, state, {
+			...mergedCookieOptions,
+			maxAge: 60 * 10, // 10 minutes
+		});
+		setCookie(c, PKCE_COOKIE_NAME, codeVerifier, {
 			...mergedCookieOptions,
 			maxAge: 60 * 10, // 10 minutes
 		});
@@ -121,24 +122,22 @@ export const createServer = async ({
 	};
 
 	const handleCallback = async (c: Context, forwardedUrl: URL) => {
-		const { searchParams } = forwardedUrl;
-
-		const code = searchParams.get("code");
-		const state = searchParams.get("state");
+		const state = forwardedUrl.searchParams.get("state");
 
 		const storedState = getCookie(c, STATE_COOKIE_NAME);
+		const codeVerifier = getCookie(c, PKCE_COOKIE_NAME);
 		deleteCookie(c, STATE_COOKIE_NAME, mergedCookieOptions);
+		deleteCookie(c, PKCE_COOKIE_NAME, mergedCookieOptions);
 
-		if (!code || !storedState || state !== storedState) {
+		if (!storedState || !codeVerifier || state !== storedState) {
 			return c.text("Invalid state or missing code. Please try again.", 400);
 		}
 
 		try {
-			await getClient(forwardedUrl).validateAuthorizationCode(
-				oidcOptions.tokenEndpoint,
-				code,
-				null,
-			);
+			await client.authorizationCodeGrant(oidcOptions.config, forwardedUrl, {
+				expectedState: storedState,
+				pkceCodeVerifier: codeVerifier,
+			});
 
 			const token = generateSessionToken();
 
@@ -181,17 +180,30 @@ export const createServer = async ({
 
 			return c.redirect(forwardedUrl.origin, 302);
 		} catch (e) {
-			if (e instanceof arctic.OAuth2RequestError) {
-				// Invalid authorization code, credentials, or redirect URI
-				return c.text(`Error: ${e.code}`, 401);
+			if (
+				e instanceof client.ResponseBodyError ||
+				e instanceof client.AuthorizationResponseError
+			) {
+				// Denied at the provider, or invalid code, PKCE verifier, credentials
+				// or redirect URI
+				return c.text(`Error: ${e.error}`, 401);
 			}
-			if (e instanceof arctic.ArcticFetchError) {
-				// Failed to call `fetch()`
+			if (e instanceof TypeError && e.message === "fetch failed") {
+				// Network-level failure calling the provider (DNS, connection, TLS).
+				// Other TypeErrors are misuse/config errors and fall through to 500.
 				const cause = e.cause;
-				return c.text(
-					`Error: ${cause instanceof Error ? cause.message : "Unknown"}`,
-					502,
-				);
+				const detail =
+					cause instanceof Error
+						? cause.message ||
+							// AggregateError with an empty message but a `code`
+							("code" in cause && typeof cause.code === "string"
+								? cause.code
+								: "")
+						: "";
+				return c.text(`Error: ${detail || "Unknown"}`, 502);
+			}
+			if (e instanceof client.ClientError && e.code === "OAUTH_TIMEOUT") {
+				return c.text("Error: identity provider timed out", 504);
 			}
 			// Parse error
 			return c.text(
